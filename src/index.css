@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  body {
+    @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+    margin: 0;
+  }
+  #root {
+    width: 100%;
+    min-height: 100vh;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.600') transparent;
+  }
+  .highlight-bloat {
+    background: rgba(239, 68, 68, 0.25);
+    border-bottom: 2px solid rgba(239, 68, 68, 0.7);
+    border-radius: 2px;
+    cursor: help;
+    position: relative;
+  }
+}
