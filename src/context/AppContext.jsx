@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { generateMockChats, computeMockTotals } from '../utils/mockData'
 
 const STORAGE_KEY = 'ecoprompt_data'
 
@@ -115,6 +116,20 @@ export function AppProvider({ children }) {
     }))
   }, [])
 
+  const loadDemoData = useCallback(() => {
+    const chats = generateMockChats()
+    const dashboardTotals = computeMockTotals(chats)
+    setData({ chats, dashboardTotals })
+    setActiveChatId(chats[0]?.id ?? null)
+    setView('dashboard')
+  }, [])
+
+  const resetData = useCallback(() => {
+    setData(defaultData)
+    setActiveChatId(null)
+    setView('chat')
+  }, [])
+
   const editUserMessage = useCallback((chatId, msgIndex, newText) => {
     setData(d => ({
       ...d,
@@ -151,6 +166,8 @@ export function AppProvider({ children }) {
         addMessage,
         updateTotals,
         editUserMessage,
+        loadDemoData,
+        resetData,
         allMessagesWithMetrics,
       }}
     >

@@ -29,7 +29,19 @@ function ChatItem({ chat, active, onSelect, onDelete }) {
 }
 
 export default function Sidebar() {
-  const { data, activeChatId, setActiveChatId, createChat, deleteChat, view, setView, darkMode, setDarkMode } = useApp()
+  const { data, activeChatId, setActiveChatId, createChat, deleteChat, view, setView, darkMode, setDarkMode, loadDemoData, resetData } = useApp()
+
+  const handleLoadDemo = () => {
+    if (data.chats.length === 0 || window.confirm('Replace your current chats with demo data?')) {
+      loadDemoData()
+    }
+  }
+
+  const handleReset = () => {
+    if (window.confirm('Clear all chats and reset totals? This cannot be undone.')) {
+      resetData()
+    }
+  }
 
   return (
     <aside className="w-64 shrink-0 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 h-screen sticky top-0">
@@ -89,6 +101,34 @@ export default function Sidebar() {
               onDelete={deleteChat}
             />
           ))
+        )}
+      </div>
+
+      {/* Demo controls */}
+      <div className="px-3 pt-2 pb-1 border-t border-gray-200 dark:border-gray-800 space-y-1">
+        <button
+          onClick={handleLoadDemo}
+          className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          title="Load demo conversations"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+          </svg>
+          Load Demo Data
+        </button>
+        {data.chats.length > 0 && (
+          <button
+            onClick={handleReset}
+            className="w-full flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-red-500 dark:hover:text-red-400 transition"
+            title="Reset all data"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3" />
+            </svg>
+            Clear All Data
+          </button>
         )}
       </div>
 

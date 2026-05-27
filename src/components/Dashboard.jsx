@@ -1,15 +1,19 @@
+import { useMemo } from 'react'
 import { useApp } from '../context/AppContext'
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
   Legend,
-  Cell,
+  ReferenceArea,
 } from 'recharts'
+import { generateBehavioralProgression } from '../utils/mockData'
 
 function MetricCard({ label, value, unit, sublabel, color, icon }) {
   return (
@@ -45,9 +49,109 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+function formatTime(seconds) {
+  if (seconds < 1) return `${(seconds * 1000).toFixed(0)} ms`
+  if (seconds < 60) return `${seconds.toFixed(1)} sec`
+  if (seconds < 3600) return `${(seconds / 60).toFixed(1)} min`
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} hr`
+  return `${(seconds / 86400).toFixed(1)} days`
+}
+
+function formatDistance(meters) {
+  if (meters < 0.01) return `${(meters * 1000).toFixed(1)} mm`
+  if (meters < 1) return `${(meters * 100).toFixed(1)} cm`
+  if (meters < 1000) return `${meters.toFixed(1)} m`
+  return `${(meters / 1000).toFixed(2)} km`
+}
+
+function formatPercent(p) {
+  if (p < 0.01) return `${(p * 1000).toFixed(0)} ppm`
+  if (p < 1) return `${p.toFixed(2)}%`
+  return `${p.toFixed(1)}%`
+}
+
+function formatCount(n) {
+  if (n < 0.01) return n.toFixed(4)
+  if (n < 1) return n.toFixed(2)
+  if (n < 100) return n.toFixed(1)
+  return Math.round(n).toLocaleString()
+}
+
+// Energy/CO₂ reference points (sources: roughly accepted public figures)
+//  - 10W LED bulb → 1 Wh = 360 sec of light
+//  - Tesla Model 3: ~150 Wh/km → 1 Wh = 6.67 m
+//  - Smartphone battery: ~15 Wh full charge
+//  - Google search: ~0.3 Wh per query
+//  - Mature tree: ~21 kg CO₂/yr ≈ 0.666 mg CO₂/sec
+//  - Gasoline car: ~120 g CO₂/km → 1 mg CO₂ = 8.33 mm
+function buildEquivalents(energySavedWh, co2SavedMg) {
+  return [
+    {
+      icon: '💡',
+      value: formatTime(energySavedWh * 360),
+      label: 'of LED bulb light',
+      sub: '10W bulb',
+    },
+    {
+      icon: '🚗',
+      value: formatDistance(energySavedWh / 0.15),
+      label: 'driven in a Tesla',
+      sub: 'Model 3 efficiency',
+    },
+    {
+      icon: '📱',
+      value: formatPercent((energySavedWh / 15) * 100),
+      label: 'of a phone charge',
+      sub: '15 Wh battery',
+    },
+    {
+      icon: '🔍',
+      value: formatCount(energySavedWh / 0.3),
+      label: 'Google searches',
+      sub: '~0.3 Wh each',
+    },
+    {
+      icon: '🌳',
+      value: formatTime(co2SavedMg / 0.666),
+      label: 'of tree breathing',
+      sub: 'CO₂ a mature tree absorbs',
+    },
+    {
+      icon: '🛣️',
+      value: formatDistance(co2SavedMg / 120),
+      label: 'not driven in a gas car',
+      sub: '120 g CO₂/km',
+    },
+  ]
+}
+
+const ProgressionTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-3 text-xs shadow-lg">
+      <p className="font-semibold text-gray-700 dark:text-gray-200 mb-1">Week of {label}</p>
+      {payload.map(p => (
+        <p key={p.dataKey} style={{ color: p.stroke }}>
+          {p.name}: {Number(p.value).toFixed(p.dataKey === 'efficiency' ? 1 : 4)}
+          {p.dataKey === 'efficiency' ? '%' : ' mWh'}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { data, allMessagesWithMetrics } = useApp()
   const totals = data.dashboardTotals
+  const progression = useMemo(() => generateBehavioralProgression(), [])
+
+  // Pull a few summary numbers from the progression for the header strip.
+  const firstEff = progression[0]?.efficiency ?? 0
+  const lastEff = progression[progression.length - 1]?.efficiency ?? 0
+  const firstEnergy = progression[0]?.energyPerPromptMWh ?? 0
+  const lastEnergy = progression[progression.length - 1]?.energyPerPromptMWh ?? 0
+  const efficiencyDelta = lastEff - firstEff
+  const energyReduction = firstEnergy > 0 ? ((firstEnergy - lastEnergy) / firstEnergy) * 100 : 0
 
   const toWh = mwh => mwh * 1000
   const energyUsedWh = totals.cumulativeEnergyUsedWh * 1000
@@ -71,6 +175,11 @@ export default function Dashboard() {
         potential: parseFloat((actual + saved).toFixed(4)),
       }
     })
+
+  const equivalents = useMemo(
+    () => buildEquivalents(totals.cumulativeEnergySavedWh, totals.cumulativeCo2SavedMg),
+    [totals.cumulativeEnergySavedWh, totals.cumulativeCo2SavedMg]
+  )
 
   const noData = allMessagesWithMetrics.length === 0
 
@@ -128,6 +237,39 @@ export default function Dashboard() {
                 color="border-emerald-200 dark:border-emerald-800"
                 icon="🌿"
               />
+            </div>
+
+            {/* Real-world equivalents */}
+            <div className="mb-8 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 bg-gradient-to-br from-emerald-50/60 to-green-50/30 dark:from-emerald-950/30 dark:to-green-950/10 p-5">
+              <div className="flex items-baseline justify-between mb-1 flex-wrap gap-1">
+                <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  What you've saved, in real-world terms
+                </h2>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Tangible equivalents of your prevented energy + CO₂
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4">
+                {equivalents.map(eq => (
+                  <div
+                    key={eq.label}
+                    className="rounded-xl bg-white/70 dark:bg-gray-900/50 border border-white dark:border-gray-800 p-3"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl leading-none">{eq.icon}</span>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white truncate">
+                        {eq.value}
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+                      {eq.label}
+                    </p>
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                      {eq.sub}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Summary stats row */}
@@ -195,6 +337,105 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               </div>
             )}
+
+            {/* Behavioral Progression — year-long view */}
+            <div className="mt-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-5">
+              <div className="flex items-start justify-between mb-1 gap-4 flex-wrap">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    Behavioral Progression
+                  </h2>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Weekly prompt efficiency and energy per prompt — last 52 weeks
+                  </p>
+                </div>
+                <div className="flex gap-3 text-xs">
+                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1">
+                    <span className="text-emerald-700 dark:text-emerald-300 font-semibold">
+                      +{efficiencyDelta.toFixed(1)}pp
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 ml-1">efficiency</span>
+                  </div>
+                  <div className="rounded-lg bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 px-2.5 py-1">
+                    <span className="text-green-700 dark:text-green-300 font-semibold">
+                      −{energyReduction.toFixed(0)}%
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400 ml-1">mWh/prompt</span>
+                  </div>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={progression} margin={{ top: 16, right: 16, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="effGradient" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="#fbbf24" />
+                      <stop offset="100%" stopColor="#10b981" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={4}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    domain={[30, 100]}
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    unit="%"
+                    width={42}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    domain={[0, 'auto']}
+                    tick={{ fontSize: 10, fill: '#9ca3af' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={56}
+                    tickFormatter={v => `${v.toFixed(2)}`}
+                  />
+                  <Tooltip content={<ProgressionTooltip />} />
+                  <Legend
+                    wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                    formatter={v => (v === 'efficiency' ? 'Prompt Efficiency (%)' : 'Energy / Prompt (mWh)')}
+                  />
+                  {/* Annotate high-activity periods */}
+                  <ReferenceArea yAxisId="left" x1={progression[5]?.label} x2={progression[9]?.label} fill="#f59e0b" fillOpacity={0.06} />
+                  <ReferenceArea yAxisId="left" x1={progression[17]?.label} x2={progression[21]?.label} fill="#f59e0b" fillOpacity={0.06} />
+                  <ReferenceArea yAxisId="left" x1={progression[28]?.label} x2={progression[32]?.label} fill="#f59e0b" fillOpacity={0.06} />
+                  <ReferenceArea yAxisId="left" x1={progression[40]?.label} x2={progression[44]?.label} fill="#f59e0b" fillOpacity={0.06} />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="efficiency"
+                    name="efficiency"
+                    stroke="url(#effGradient)"
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 4, fill: '#10b981' }}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="energyPerPromptMWh"
+                    name="energy"
+                    stroke="#94a3b8"
+                    strokeWidth={1.5}
+                    strokeDasharray="4 3"
+                    dot={false}
+                    activeDot={{ r: 3, fill: '#64748b' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <p className="mt-2 text-xs text-gray-400 dark:text-gray-500 italic">
+                Shaded regions mark high-activity periods (deadlines, finals) where prompt efficiency typically dips before recovering.
+              </p>
+            </div>
 
             {/* Aggregate energy gauge */}
             {energyPotentialWh > 0 && (
